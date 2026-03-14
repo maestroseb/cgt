@@ -152,9 +152,6 @@ function invalidarCache() {
 // ===================== HTML WEB DE BÚSQUEDA =====================
 
 function getWebHTML() {
-  // Cargar datos al generar el HTML — sin async, sin google.script.run
-  const datosJSON = JSON.stringify(obtenerDatosGlobal());
-
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -231,6 +228,9 @@ function getWebHTML() {
   .spin { display: inline-block; width: 20px; height: 20px; border: 3px solid #eee; border-top-color: var(--verde); border-radius: 50%; animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .placeholder { text-align: center; padding: 50px; color: #bbb; font-size: 14px; }
+
+  .error-msg { text-align: center; padding: 40px 20px; color: #C73E1D; }
+  .error-msg button { margin-top: 12px; padding: 8px 20px; border: 2px solid #C73E1D; background: #fff; color: #C73E1D; border-radius: 8px; font-weight: 600; cursor: pointer; }
 
   /* Mobile cards */
   .cards { display: none; }
@@ -504,6 +504,9 @@ function filtrar() {
 }
 
 // ============ RENDER ============
+var esMobile = window.matchMedia('(max-width: 900px)').matches;
+var MAX_RESULTADOS_MOBILE = 200;
+
 function renderTabla(filas) {
   const info = document.getElementById('info');
   const wrap = document.getElementById('tablaWrap');
@@ -514,120 +517,111 @@ function renderTabla(filas) {
     return;
   }
 
+  var totalFilas = filas.length;
+  var limitado = false;
+  if (esMobile && filas.length > MAX_RESULTADOS_MOBILE) {
+    filas = filas.slice(0, MAX_RESULTADOS_MOBILE);
+    limitado = true;
+  }
+
   info.style.display = 'block';
-  info.innerHTML = '<b>' + filas.length + '</b> resultado(s)';
+  info.innerHTML = '<b>' + filas.length + '</b> resultado(s)' + (limitado ? ' <span style="color:#C73E1D">(mostrando ' + MAX_RESULTADOS_MOBILE + ' de ' + totalFilas + ', filtra más para ver todos)</span>' : '');
 
   const codigoCentro = centroSeleccionado ? centroSeleccionado.codigo : '';
+  var html = '';
 
-  var html = '<table><thead><tr>';
-  html += '<th class="th-base"></th>';
-  html += '<th class="th-base">N.I.F.</th>';
-  html += '<th class="th-base">Apellidos y nombre</th>';
-  html += '<th class="th-origen sep-origen">Prov.O</th>';
-  html += '<th class="th-origen">Puesto.O</th>';
-  html += '<th class="th-origen"></th>';
-  html += '<th class="th-origen">Centro Origen</th>';
-  html += '<th class="th-destino sep-destino">Prov.D</th>';
-  html += '<th class="th-destino">Puesto.D</th>';
-  html += '<th class="th-destino"></th>';
-  html += '<th class="th-destino">Centro Destino</th>';
-  html += '<th class="th-base sep-extra">Petición</th>';
-  html += '<th class="th-base">Puntos</th>';
-  html += '</tr></thead><tbody>';
+  if (!esMobile) {
+    // Desktop: render table
+    html = '<table><thead><tr>';
+    html += '<th class="th-base"></th>';
+    html += '<th class="th-base">N.I.F.</th>';
+    html += '<th class="th-base">Apellidos y nombre</th>';
+    html += '<th class="th-origen sep-origen">Prov.O</th>';
+    html += '<th class="th-origen">Puesto.O</th>';
+    html += '<th class="th-origen"></th>';
+    html += '<th class="th-origen">Centro Origen</th>';
+    html += '<th class="th-destino sep-destino">Prov.D</th>';
+    html += '<th class="th-destino">Puesto.D</th>';
+    html += '<th class="th-destino"></th>';
+    html += '<th class="th-destino">Centro Destino</th>';
+    html += '<th class="th-base sep-extra">Petición</th>';
+    html += '<th class="th-base">Puntos</th>';
+    html += '</tr></thead><tbody>';
 
-  for (var i = 0; i < filas.length; i++) {
-    var r = filas[i];
-    var oMatch = codigoCentro && r.centroO === codigoCentro;
-    var dMatch = codigoCentro && r.centroAd === codigoCentro;
-    var espO = lookupEsp(r.puestoO);
-    var espD = lookupEsp(r.puestoAd);
+    for (var i = 0; i < filas.length; i++) {
+      var r = filas[i];
+      var oMatch = codigoCentro && r.centroO === codigoCentro;
+      var dMatch = codigoCentro && r.centroAd === codigoCentro;
+      var espO = lookupEsp(r.puestoO);
+      var espD = lookupEsp(r.puestoAd);
 
-    html += '<tr>';
-
-    // Dirección
-    html += '<td style="text-align:center">';
-    if (r.direccion === 'sale') html += '<span class="dir dir-sale">↗ SALE</span>';
-    else if (r.direccion === 'llega') html += '<span class="dir dir-llega">↙ LLEGA</span>';
-    html += '</td>';
-
-    // NIF
-    html += '<td>' + esc(r.nif) + '</td>';
-
-    // Nombre
-    html += '<td><b>' + esc(r.nombre) + '</b></td>';
-
-    // --- BLOQUE ORIGEN (borde azul) ---
-    html += '<td class="sep-origen">' + (r.provO ? '<span class="prov" style="background:' + colorProv(r.provO) + '">' + esc(r.provO) + '</span>' : '') + '</td>';
-    html += '<td>' + esc(r.puestoO) + '</td>';
-    html += '<td>' + (espO ? '<span class="esp-badge" style="background:' + colorEsp(espO) + '">' + esc(espO) + '</span>' : '') + '</td>';
-    html += '<td' + (oMatch ? ' class="centro-match"' : '') + '>' + esc(r.nombreO || r.centroO) + '</td>';
-
-    // --- BLOQUE DESTINO (borde rojo) ---
-    html += '<td class="sep-destino">' + (r.provD ? '<span class="prov" style="background:' + colorProv(r.provD) + '">' + esc(r.provD) + '</span>' : '') + '</td>';
-    html += '<td>' + esc(r.puestoAd) + '</td>';
-    html += '<td>' + (espD ? '<span class="esp-badge" style="background:' + colorEsp(espD) + '">' + esc(espD) + '</span>' : '') + '</td>';
-    html += '<td' + (dMatch ? ' class="centro-match"' : '') + '>' + esc(r.nombreD || r.centroAd) + '</td>';
-
-    // Petición y puntos
-    html += '<td class="sep-extra" style="text-align:center">' + esc(r.peticion) + '</td>';
-    html += '<td class="puntos">' + esc(r.puntos) + '</td>';
-
-    html += '</tr>';
-  }
-
-  html += '</tbody></table>';
-
-  // Mobile cards
-  html += '<div class="cards">';
-  for (var j = 0; j < filas.length; j++) {
-    var m = filas[j];
-    var mEspO = lookupEsp(m.puestoO);
-    var mEspD = lookupEsp(m.puestoAd);
-    var cardClass = 'card';
-    if (m.direccion === 'sale') cardClass += ' card-sale';
-    else if (m.direccion === 'llega') cardClass += ' card-llega';
-
-    html += '<div class="' + cardClass + '">';
-
-    // Top: nombre + puntos
-    html += '<div class="card-top">';
-    html += '<div><span class="card-nombre">' + esc(m.nombre) + '</span>';
-    if (m.direccion === 'sale') html += ' <span class="dir dir-sale">↗ SALE</span>';
-    else if (m.direccion === 'llega') html += ' <span class="dir dir-llega">↙ LLEGA</span>';
-    html += '<br><span class="card-nif">' + esc(m.nif) + '</span></div>';
-    html += '<span class="card-puntos">' + esc(m.puntos) + '</span>';
-    html += '</div>';
-
-    // Origen y destino lado a lado
-    html += '<div class="card-row">';
-
-    // Origen
-    html += '<div class="card-bloque">';
-    html += '<div class="card-label card-label-origen">Origen</div>';
-    html += '<div class="card-meta">';
-    if (m.provO) html += '<span class="prov" style="background:' + colorProv(m.provO) + '">' + esc(m.provO) + '</span>';
-    if (mEspO) html += '<span class="esp-badge" style="background:' + colorEsp(mEspO) + '">' + esc(mEspO) + '</span>';
-    html += '</div>';
-    html += '<div class="card-centro">' + esc(m.nombreO || m.centroO) + '</div>';
-    html += '</div>';
-
-    // Destino
-    if (m.centroAd || m.nombreD) {
-      html += '<div class="card-bloque">';
-      html += '<div class="card-label card-label-destino">Destino</div>';
-      html += '<div class="card-meta">';
-      if (m.provD) html += '<span class="prov" style="background:' + colorProv(m.provD) + '">' + esc(m.provD) + '</span>';
-      if (mEspD) html += '<span class="esp-badge" style="background:' + colorEsp(mEspD) + '">' + esc(mEspD) + '</span>';
-      html += '</div>';
-      html += '<div class="card-centro">' + esc(m.nombreD || m.centroAd) + '</div>';
-      if (m.peticion) html += '<div class="card-peticion">Pet. ' + esc(m.peticion) + '</div>';
-      html += '</div>';
+      html += '<tr>';
+      html += '<td style="text-align:center">';
+      if (r.direccion === 'sale') html += '<span class="dir dir-sale">↗ SALE</span>';
+      else if (r.direccion === 'llega') html += '<span class="dir dir-llega">↙ LLEGA</span>';
+      html += '</td>';
+      html += '<td>' + esc(r.nif) + '</td>';
+      html += '<td><b>' + esc(r.nombre) + '</b></td>';
+      html += '<td class="sep-origen">' + (r.provO ? '<span class="prov" style="background:' + colorProv(r.provO) + '">' + esc(r.provO) + '</span>' : '') + '</td>';
+      html += '<td>' + esc(r.puestoO) + '</td>';
+      html += '<td>' + (espO ? '<span class="esp-badge" style="background:' + colorEsp(espO) + '">' + esc(espO) + '</span>' : '') + '</td>';
+      html += '<td' + (oMatch ? ' class="centro-match"' : '') + '>' + esc(r.nombreO || r.centroO) + '</td>';
+      html += '<td class="sep-destino">' + (r.provD ? '<span class="prov" style="background:' + colorProv(r.provD) + '">' + esc(r.provD) + '</span>' : '') + '</td>';
+      html += '<td>' + esc(r.puestoAd) + '</td>';
+      html += '<td>' + (espD ? '<span class="esp-badge" style="background:' + colorEsp(espD) + '">' + esc(espD) + '</span>' : '') + '</td>';
+      html += '<td' + (dMatch ? ' class="centro-match"' : '') + '>' + esc(r.nombreD || r.centroAd) + '</td>';
+      html += '<td class="sep-extra" style="text-align:center">' + esc(r.peticion) + '</td>';
+      html += '<td class="puntos">' + esc(r.puntos) + '</td>';
+      html += '</tr>';
     }
+    html += '</tbody></table>';
+  } else {
+    // Mobile: render cards only
+    html = '<div class="cards" style="display:block">';
+    for (var j = 0; j < filas.length; j++) {
+      var m = filas[j];
+      var mEspO = lookupEsp(m.puestoO);
+      var mEspD = lookupEsp(m.puestoAd);
+      var cardClass = 'card';
+      if (m.direccion === 'sale') cardClass += ' card-sale';
+      else if (m.direccion === 'llega') cardClass += ' card-llega';
 
-    html += '</div>'; // card-row
-    html += '</div>'; // card
+      html += '<div class="' + cardClass + '">';
+      html += '<div class="card-top">';
+      html += '<div><span class="card-nombre">' + esc(m.nombre) + '</span>';
+      if (m.direccion === 'sale') html += ' <span class="dir dir-sale">↗ SALE</span>';
+      else if (m.direccion === 'llega') html += ' <span class="dir dir-llega">↙ LLEGA</span>';
+      html += '<br><span class="card-nif">' + esc(m.nif) + '</span></div>';
+      html += '<span class="card-puntos">' + esc(m.puntos) + '</span>';
+      html += '</div>';
+
+      html += '<div class="card-row">';
+      html += '<div class="card-bloque">';
+      html += '<div class="card-label card-label-origen">Origen</div>';
+      html += '<div class="card-meta">';
+      if (m.provO) html += '<span class="prov" style="background:' + colorProv(m.provO) + '">' + esc(m.provO) + '</span>';
+      if (mEspO) html += '<span class="esp-badge" style="background:' + colorEsp(mEspO) + '">' + esc(mEspO) + '</span>';
+      html += '</div>';
+      html += '<div class="card-centro">' + esc(m.nombreO || m.centroO) + '</div>';
+      html += '</div>';
+
+      if (m.centroAd || m.nombreD) {
+        html += '<div class="card-bloque">';
+        html += '<div class="card-label card-label-destino">Destino</div>';
+        html += '<div class="card-meta">';
+        if (m.provD) html += '<span class="prov" style="background:' + colorProv(m.provD) + '">' + esc(m.provD) + '</span>';
+        if (mEspD) html += '<span class="esp-badge" style="background:' + colorEsp(mEspD) + '">' + esc(mEspD) + '</span>';
+        html += '</div>';
+        html += '<div class="card-centro">' + esc(m.nombreD || m.centroAd) + '</div>';
+        if (m.peticion) html += '<div class="card-peticion">Pet. ' + esc(m.peticion) + '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>'; // card-row
+      html += '</div>'; // card
+    }
+    html += '</div>'; // cards
   }
-  html += '</div>'; // cards
 
   wrap.innerHTML = html;
 }
@@ -643,9 +637,8 @@ function limpiar() {
   document.getElementById('tablaWrap').innerHTML = '<div class="placeholder">Busca un centro, localidad o nombre para ver resultados.</div>';
 }
 
-// ============ INIT (datos embebidos — sin google.script.run) ============
-(function() {
-  var result = ${datosJSON};
+// ============ INIT (carga asíncrona con google.script.run) ============
+function inicializarDatos(result) {
   DATOS = result.datos || [];
   for (var idx = 0; idx < DATOS.length; idx++) { DATOS[idx]._idx = idx; }
   ESPECIALIDADES = result.especialidades || {};
@@ -668,7 +661,27 @@ function limpiar() {
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('tablaWrap').innerHTML = '<div class="placeholder">Busca un centro, localidad o nombre para ver resultados.</div>';
-})();
+}
+
+function errorCarga(err) {
+  document.getElementById('loading').innerHTML =
+    '<div class="error-msg">' +
+    '<p>No se pudieron cargar los datos.</p>' +
+    '<p style="font-size:12px;margin-top:8px">' + (err && err.message ? err.message : 'Error de conexión') + '</p>' +
+    '<button onclick="cargarDatos()">Reintentar</button>' +
+    '</div>';
+}
+
+function cargarDatos() {
+  document.getElementById('loading').innerHTML = '<div class="spin"></div><br>Cargando datos...';
+  document.getElementById('loading').style.display = 'block';
+  google.script.run
+    .withSuccessHandler(inicializarDatos)
+    .withFailureHandler(errorCarga)
+    .obtenerDatosGlobal();
+}
+
+cargarDatos();
 </script>
 </body>
 </html>`;
