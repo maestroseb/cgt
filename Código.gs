@@ -152,6 +152,9 @@ function invalidarCache() {
 // ===================== HTML WEB DE BÚSQUEDA =====================
 
 function getWebHTML() {
+  // Incluir la URL del script para fallback en Safari
+  const scriptUrl = ScriptApp.getService().getUrl() || '';
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -164,7 +167,8 @@ function getWebHTML() {
 <style>
   :root { --verde: #1a5c2e; --verde-claro: #d9e2d0; --fondo: #f5f7fa; --borde: #ddd; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--fondo); color: #333; }
+  html { width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--fondo); color: #333; width: 100%; overflow-x: hidden; }
 
   header { background: var(--verde); color: #fff; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
   header h1 { font-size: 1.1rem; }
@@ -175,7 +179,7 @@ function getWebHTML() {
     position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   }
-  .search-input-wrap { position: relative; flex: 1; min-width: 300px; }
+  .search-input-wrap { position: relative; flex: 1; min-width: 200px; }
   .search-input-wrap input {
     width: 100%; padding: 9px 12px 9px 32px; border: 2px solid var(--borde);
     border-radius: 8px; font-size: 13px; transition: border-color 0.2s;
@@ -277,6 +281,21 @@ function getWebHTML() {
     .filtros-mobile { display: contents; }
     .filtros-mobile .btn-row { display: contents; }
   }
+
+  /* Forzar layout móvil via JS cuando el user-agent es móvil pero el iframe reporta ancho grande */
+  body.force-mobile header h1 { font-size: 0.95rem; }
+  body.force-mobile .search-area { flex-direction: column; align-items: stretch; padding: 10px 12px; gap: 8px; }
+  body.force-mobile .search-input-wrap { min-width: 100%; }
+  body.force-mobile .search-input-wrap input { font-size: 14px; padding: 10px 12px 10px 32px; }
+  body.force-mobile select { font-size: 13px; padding: 9px 10px; }
+  body.force-mobile .btn { padding: 10px 16px; font-size: 13px; }
+  body.force-mobile .results-info { padding: 8px 12px; }
+  body.force-mobile .filtros-mobile { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; }
+  body.force-mobile .filtros-mobile select { width: 100%; }
+  body.force-mobile .filtros-mobile .btn-row { grid-column: 1 / -1; display: flex; gap: 6px; }
+  body.force-mobile .filtros-mobile .btn-row .btn { flex: 1; }
+  body.force-mobile .table-wrap table { display: none; }
+  body.force-mobile .cards { display: block; }
 </style>
 </head>
 <body>
@@ -328,6 +347,37 @@ function getWebHTML() {
 </div>
 
 <script>
+// ============ VIEWPORT FIX (iframe de Google Apps Script) ============
+(function() {
+  // Forzar viewport correcto — el iframe de Google a veces no lo propaga
+  try {
+    if (window.self !== window.top) {
+      // Estamos en un iframe, intentar ajustar el parent frame
+      var fr = window.frameElement;
+      if (fr) {
+        fr.style.width = '100%';
+        fr.style.maxWidth = '100vw';
+      }
+    }
+  } catch(e) { /* cross-origin, ignorar */ }
+
+  // Forzar el viewport meta tag dinámicamente
+  var vp = document.querySelector('meta[name="viewport"]');
+  if (!vp) {
+    vp = document.createElement('meta');
+    vp.name = 'viewport';
+    document.head.appendChild(vp);
+  }
+  vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
+
+  // Si el user-agent indica móvil pero el media query no detecta <900px (problema del iframe de GAS),
+  // forzar el layout móvil con una clase CSS
+  var uaMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (uaMobile) {
+    document.body.classList.add('force-mobile');
+  }
+})();
+
 // ============ STATE ============
 let DATOS = [];
 let ESPECIALIDADES = {};
@@ -504,7 +554,13 @@ function filtrar() {
 }
 
 // ============ RENDER ============
-var esMobile = window.matchMedia('(max-width: 900px)').matches;
+// Detectar móvil por user-agent como respaldo (el iframe de GAS puede reportar ancho incorrecto)
+var uaEsMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+var esMobile = window.matchMedia('(max-width: 900px)').matches || (uaEsMobile && window.innerWidth < 1024);
+// Actualizar en caso de cambio de orientación
+window.addEventListener('resize', function() {
+  esMobile = window.matchMedia('(max-width: 900px)').matches || (uaEsMobile && window.innerWidth < 1024);
+});
 var MAX_RESULTADOS_MOBILE = 200;
 
 function renderTabla(filas) {
@@ -672,13 +728,34 @@ function errorCarga(err) {
     '</div>';
 }
 
+var SCRIPT_URL = '${scriptUrl}';
+
+function cargarDatosFetch() {
+  if (!SCRIPT_URL) { errorCarga({ message: 'URL del script no disponible' }); return; }
+  fetch(SCRIPT_URL + '?action=getData')
+    .then(function(r) { return r.json(); })
+    .then(inicializarDatos)
+    .catch(function(e) { errorCarga({ message: 'Error de red: ' + e.message }); });
+}
+
 function cargarDatos() {
   document.getElementById('loading').innerHTML = '<div class="spin"></div><br>Cargando datos...';
   document.getElementById('loading').style.display = 'block';
-  google.script.run
-    .withSuccessHandler(inicializarDatos)
-    .withFailureHandler(errorCarga)
-    .obtenerDatosGlobal();
+
+  // Intentar google.script.run primero, si no existe (Safari bloquea cookies) usar fetch
+  if (typeof google !== 'undefined' && google.script && google.script.run) {
+    google.script.run
+      .withSuccessHandler(inicializarDatos)
+      .withFailureHandler(function(err) {
+        // Si google.script.run falla, intentar fetch como respaldo
+        console.warn('google.script.run falló, intentando fetch...', err);
+        cargarDatosFetch();
+      })
+      .obtenerDatosGlobal();
+  } else {
+    // Safari u otro navegador donde google.script.run no está disponible
+    cargarDatosFetch();
+  }
 }
 
 cargarDatos();
