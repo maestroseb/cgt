@@ -163,7 +163,7 @@
       <option value="sale">↗ Solo SALEN</option>
       <option value="llega">↙ Solo LLEGAN</option>
       <option value="sinmov">— Sin movimiento</option>
-      <option value="cambioesp">⟳ Cambio de especialidad</option>
+      <option value="cambioesp">↻ Cambio de especialidad</option>
     </select>
     <select id="filtroEsp">
       <option value="">Todas las especialidades</option>
@@ -479,7 +479,7 @@ function renderTabla(filas) {
       html += '<td style="text-align:center">';
       if (r.direccion === 'sale') html += '<span class="dir dir-sale">↗ SALE</span>';
       else if (r.direccion === 'llega') html += '<span class="dir dir-llega">↙ LLEGA</span>';
-      else if (r.direccion === 'cambioesp') html += '<span class="dir dir-cambioesp">⟳ CAMBIO ESP.</span>';
+      else if (r.direccion === 'cambioesp') html += '<span class="dir dir-cambioesp">↻ CAMBIO ESP.</span>';
       else if (r.direccion === 'sinmov') html += '<span class="dir dir-sinmov">— NO SE MUEVE</span>';
       html += '</td>';
       html += '<td>' + esc(r.nif) + '</td>';
@@ -515,7 +515,7 @@ function renderTabla(filas) {
       html += '<div><span class="card-nombre">' + esc(m.nombre) + '</span>';
       if (m.direccion === 'sale') html += ' <span class="dir dir-sale">↗ SALE</span>';
       else if (m.direccion === 'llega') html += ' <span class="dir dir-llega">↙ LLEGA</span>';
-      else if (m.direccion === 'cambioesp') html += ' <span class="dir dir-cambioesp">⟳ CAMBIO ESP.</span>';
+      else if (m.direccion === 'cambioesp') html += ' <span class="dir dir-cambioesp">↻ CAMBIO ESP.</span>';
       else if (m.direccion === 'sinmov') html += ' <span class="dir dir-sinmov">— NO SE MUEVE</span>';
       html += '<br><span class="card-nif">' + esc(m.nif) + '</span></div>';
       html += '<span class="card-puntos">' + esc(m.puntos) + '</span>';
