@@ -68,6 +68,7 @@
   .dir-sale { background: #f8d7da; color: #842029; }
   .dir-llega { background: #d1e7dd; color: #0f5132; }
   .dir-sinmov { background: #e2e3e5; color: #41464b; }
+  .dir-cambioesp { background: #fff3cd; color: #664d03; }
   .centro-match { background: #fff3cd; }
   .puntos { font-weight: 700; font-variant-numeric: tabular-nums; }
 
@@ -87,6 +88,7 @@
   .card.card-sale { border-left-color: #dc3545; }
   .card.card-llega { border-left-color: #28a745; }
   .card.card-sinmov { border-left-color: #6c757d; }
+  .card.card-cambioesp { border-left-color: #ffc107; }
   .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .card-nombre { font-weight: 700; font-size: 13px; }
   .card-nif { font-size: 11px; color: #888; }
@@ -161,6 +163,7 @@
       <option value="sale">↗ Solo SALEN</option>
       <option value="llega">↙ Solo LLEGAN</option>
       <option value="sinmov">— Sin movimiento</option>
+      <option value="cambioesp">🔄 Cambio de especialidad</option>
     </select>
     <select id="filtroEsp">
       <option value="">Todas las especialidades</option>
@@ -348,44 +351,49 @@ function filtrar() {
       if (r.provO !== provFiltro && r.provD !== provFiltro) continue;
     }
 
-    // Determinar si esta persona tiene destino asignado (se mueve)
+    // Determinar el tipo de movimiento de esta persona
     var tieneDestino = r.centroAd && String(r.centroAd).trim() !== '';
-    var destinoDiferente = tieneDestino && r.centroAd !== r.centroO;
+    var mismoCentro = tieneDestino && r.centroAd === r.centroO;
+    var cambiaPuesto = mismoCentro && r.puestoAd && r.puestoO && String(r.puestoAd).trim() !== String(r.puestoO).trim();
+    var destinoDiferente = tieneDestino && !mismoCentro;
+
+    // Clasificar: sale, llega, cambioesp, sinmov
+    function clasificar() {
+      if (destinoDiferente) return 'sale';
+      if (cambiaPuesto) return 'cambioesp';
+      return 'sinmov';
+    }
 
     var coincide = false;
-    var direccion = ''; // 'sale', 'llega', 'sinmov' o ''
+    var direccion = ''; // 'sale', 'llega', 'cambioesp', 'sinmov' o ''
 
     if (codigoCentro) {
       var esOrigen = r.centroO === codigoCentro;
       var esDestino = tieneDestino && r.centroAd === codigoCentro;
-      if (esOrigen && destinoDiferente) {
+      if (esOrigen) {
         coincide = true;
-        direccion = 'sale'; // sale del centro buscado hacia otro
+        direccion = clasificar();
       }
-      if (esOrigen && !destinoDiferente) {
+      if (esDestino && destinoDiferente) {
         coincide = true;
-        direccion = 'sinmov'; // está en el centro pero no se mueve
-      }
-      if (esDestino) {
-        coincide = true;
-        direccion = (direccion === 'sale') ? 'ambos' : 'llega'; // llega al centro buscado
+        direccion = (direccion === 'sale') ? 'ambos' : 'llega'; // llega al centro buscado desde otro
       }
     } else if (q) {
       if (norm(r.centroO).includes(q) || norm(r.nombreO).includes(q) || norm(r.provO).includes(q)) {
         coincide = true;
-        direccion = destinoDiferente ? 'sale' : 'sinmov';
+        direccion = clasificar();
       }
-      if (tieneDestino && (norm(r.centroAd).includes(q) || norm(r.nombreD).includes(q) || norm(r.provD).includes(q))) {
+      if (tieneDestino && destinoDiferente && (norm(r.centroAd).includes(q) || norm(r.nombreD).includes(q) || norm(r.provD).includes(q))) {
         coincide = true;
         direccion = (direccion === 'sale') ? 'ambos' : 'llega';
       }
       if (norm(r.nombre).includes(q) || norm(r.nif).includes(q)) {
         coincide = true;
-        if (!direccion) direccion = destinoDiferente ? 'sale' : 'sinmov';
+        if (!direccion) direccion = clasificar();
       }
     } else if (espFiltro || provFiltro) {
       coincide = true;
-      direccion = destinoDiferente ? 'sale' : 'sinmov';
+      direccion = clasificar();
     }
 
     if (!coincide) continue;
@@ -393,6 +401,7 @@ function filtrar() {
     if (dir === 'sale' && direccion !== 'sale') continue;
     if (dir === 'llega' && direccion !== 'llega') continue;
     if (dir === 'sinmov' && direccion !== 'sinmov') continue;
+    if (dir === 'cambioesp' && direccion !== 'cambioesp') continue;
 
     var copia = {};
     for (var k in r) copia[k] = r[k];
@@ -470,6 +479,7 @@ function renderTabla(filas) {
       html += '<td style="text-align:center">';
       if (r.direccion === 'sale') html += '<span class="dir dir-sale">↗ SALE</span>';
       else if (r.direccion === 'llega') html += '<span class="dir dir-llega">↙ LLEGA</span>';
+      else if (r.direccion === 'cambioesp') html += '<span class="dir dir-cambioesp">🔄 CAMBIO ESP.</span>';
       else if (r.direccion === 'sinmov') html += '<span class="dir dir-sinmov">— NO SE MUEVE</span>';
       html += '</td>';
       html += '<td>' + esc(r.nif) + '</td>';
@@ -497,6 +507,7 @@ function renderTabla(filas) {
       var cardClass = 'card';
       if (m.direccion === 'sale') cardClass += ' card-sale';
       else if (m.direccion === 'llega') cardClass += ' card-llega';
+      else if (m.direccion === 'cambioesp') cardClass += ' card-cambioesp';
       else if (m.direccion === 'sinmov') cardClass += ' card-sinmov';
 
       html += '<div class="' + cardClass + '">';
@@ -504,6 +515,7 @@ function renderTabla(filas) {
       html += '<div><span class="card-nombre">' + esc(m.nombre) + '</span>';
       if (m.direccion === 'sale') html += ' <span class="dir dir-sale">↗ SALE</span>';
       else if (m.direccion === 'llega') html += ' <span class="dir dir-llega">↙ LLEGA</span>';
+      else if (m.direccion === 'cambioesp') html += ' <span class="dir dir-cambioesp">🔄 CAMBIO ESP.</span>';
       else if (m.direccion === 'sinmov') html += ' <span class="dir dir-sinmov">— NO SE MUEVE</span>';
       html += '<br><span class="card-nif">' + esc(m.nif) + '</span></div>';
       html += '<span class="card-puntos">' + esc(m.puntos) + '</span>';
